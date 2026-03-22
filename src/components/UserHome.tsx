@@ -9,6 +9,7 @@ import { collection, addDoc, query, where, onSnapshot, orderBy, doc, updateDoc, 
 import { db } from '../firebase';
 import { ServiceRequest, RequestStatus } from '../types';
 import { Chat } from './Chat';
+import { reverseGeocode } from '../services/locationService';
 
 const CATEGORIES = [
   { id: 'electrician', name: 'Electrician', icon: Wrench, color: 'bg-yellow-100 text-yellow-700' },
@@ -39,23 +40,25 @@ export const UserHome: React.FC = () => {
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
+        async (position) => {
+          const { latitude, longitude } = position.coords;
           setLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
+            lat: latitude,
+            lng: longitude,
             address: 'Detecting address...',
           });
-          // In a real app, we'd reverse geocode here
-          setTimeout(() => {
-            setLocation(prev => prev ? { 
-              ...prev, 
-              address: 'Dhanmondi, Dhaka',
-              district: 'Dhaka',
-              thana: 'Dhanmondi'
-            } : null);
-          }, 1000);
+          
+          const geoResult = await reverseGeocode(latitude, longitude);
+          setLocation({
+            lat: latitude,
+            lng: longitude,
+            address: geoResult.address,
+            district: geoResult.district,
+            thana: geoResult.thana
+          });
         },
-        (error) => console.error('Error getting location:', error)
+        (error) => console.error('Error getting location:', error),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
   }, []);

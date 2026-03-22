@@ -6,6 +6,7 @@ import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp, 
 import { db } from '../firebase';
 import { ServiceRequest } from '../types';
 import { Chat } from './Chat';
+import { reverseGeocode } from '../services/locationService';
 
 export const HelperHome: React.FC = () => {
   const { user, profile, logout, updateRole } = useAuth();
@@ -29,31 +30,33 @@ export const HelperHome: React.FC = () => {
   useEffect(() => {
     if (navigator.geolocation && user && !profile?.location?.district) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          // Mock reverse geocoding for helper
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          const geoResult = await reverseGeocode(latitude, longitude);
+          
           updateDoc(doc(db, 'users', user.uid), {
             location: {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              address: 'Dhanmondi, Dhaka',
-              district: 'Dhaka',
-              thana: 'Dhanmondi'
+              latitude,
+              longitude,
+              address: geoResult.address,
+              district: geoResult.district,
+              thana: geoResult.thana
             }
           });
         },
-        (error) => console.error('Error getting helper location:', error)
+        (error) => console.error('Error getting helper location:', error),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
   }, [user, profile?.location?.district]);
 
   useEffect(() => {
-    if (user && isOnline && profile?.location?.district && profile?.location?.thana) {
-      // Listen for pending requests in helper's area
+    if (user && isOnline && profile?.location?.district) {
+      // Listen for pending requests in helper's city (district)
       const q = query(
         collection(db, 'requests'),
         where('status', '==', 'pending'),
-        where('location.district', '==', profile.location.district),
-        where('location.thana', '==', profile.location.thana)
+        where('location.district', '==', profile.location.district)
       );
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
@@ -68,7 +71,7 @@ export const HelperHome: React.FC = () => {
     } else {
       setPendingRequests([]);
     }
-  }, [user, isOnline, profile?.location?.district, profile?.location?.thana]);
+  }, [user, isOnline, profile?.location?.district]);
 
   useEffect(() => {
     if (user) {
@@ -243,7 +246,7 @@ export const HelperHome: React.FC = () => {
             <p className="text-sm font-bold text-slate-900">{isOnline ? 'You are Online' : 'You are Offline'}</p>
             <p className="text-xs text-slate-500">
               {isOnline 
-                ? `Ready in ${profile?.location?.thana || 'Detecting...'}, ${profile?.location?.district || ''}` 
+                ? `Ready in ${profile?.location?.district || 'Detecting City...'}` 
                 : 'Go online to see requests'}
             </p>
           </div>
