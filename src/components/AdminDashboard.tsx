@@ -6,12 +6,13 @@ import { collection, query, where, onSnapshot, doc, updateDoc, getDocs, orderBy 
 import { db } from '../firebase';
 import { UserProfile, ServiceRequest } from '../types';
 
-type AdminTab = 'all' | 'pending' | 'verified' | 'work';
+type AdminTab = 'all' | 'pending' | 'verified' | 'live' | 'work';
 
 export const AdminDashboard: React.FC = () => {
   const { user, profile, logout } = useAuth();
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [completedRequests, setCompletedRequests] = useState<ServiceRequest[]>([]);
+  const [liveRequests, setLiveRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTab>('all');
@@ -29,14 +30,27 @@ export const AdminDashboard: React.FC = () => {
       });
 
       // Listen to completed requests
-      const requestsQuery = query(
+      const completedQuery = query(
         collection(db, 'requests'),
         where('status', '==', 'completed'),
         orderBy('completedAt', 'desc')
       );
-      const unsubscribeRequests = onSnapshot(requestsQuery, (snapshot) => {
+      const unsubscribeCompleted = onSnapshot(completedQuery, (snapshot) => {
         const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
         setCompletedRequests(reqs);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'requests');
+      });
+
+      // Listen to live requests (pending, assigned, in-progress)
+      const liveQuery = query(
+        collection(db, 'requests'),
+        where('status', 'in', ['pending', 'assigned', 'in-progress']),
+        orderBy('createdAt', 'desc')
+      );
+      const unsubscribeLive = onSnapshot(liveQuery, (snapshot) => {
+        const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceRequest));
+        setLiveRequests(reqs);
         setLoading(false);
       }, (error) => {
         handleFirestoreError(error, OperationType.LIST, 'requests');
@@ -45,7 +59,8 @@ export const AdminDashboard: React.FC = () => {
 
       return () => {
         unsubscribeUsers();
-        unsubscribeRequests();
+        unsubscribeCompleted();
+        unsubscribeLive();
       };
     }
   }, [user, profile?.role]);
@@ -189,6 +204,114 @@ export const AdminDashboard: React.FC = () => {
     </div>
   );
 
+  const renderLiveWorkTable = () => (
+    <div className="space-y-4 mb-24">
+      {liveRequests.length > 0 ? (
+        liveRequests.map((req) => (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            key={req.id}
+            className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100"
+          >
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-xl ${
+                  req.status === 'pending' ? 'bg-amber-50 text-amber-600' : 
+                  req.status === 'assigned' ? 'bg-blue-50 text-blue-600' : 
+                  'bg-indigo-50 text-indigo-600'
+                }`}>
+                  <Zap size={20} className={req.status === 'in-progress' ? 'animate-pulse' : ''} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold text-slate-900">{req.category}</p>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-tighter ${
+                      req.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                      req.status === 'assigned' ? 'bg-blue-100 text-blue-700' :
+                      'bg-indigo-100 text-indigo-700'
+                    }`}>
+                      {req.status}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium">Requested {new Date(req.createdAt).toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-black text-slate-900">৳{req.estimatedCost}</p>
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tighter">Budget</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-3 mb-4">
+              <p className="text-xs text-slate-600 line-clamp-2 italic">"{req.description}"</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-50">
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase mb-2">Customer</p>
+                {(() => {
+                  const customer = allUsers.find(u => u.uid === req.userId);
+                  return (
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-slate-100 overflow-hidden flex items-center justify-center text-slate-400">
+                        {customer?.photoURL ? (
+                          <img src={customer?.photoURL} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <User size={12} />
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-slate-700">{customer?.displayName || 'Unknown'}</span>
+                        <span className="text-[8px] text-slate-400 leading-none">{customer?.email}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase mb-2">Assigned Helper</p>
+                {req.helperId ? (() => {
+                  const helper = allUsers.find(u => u.uid === req.helperId);
+                  return (
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-indigo-100 overflow-hidden flex items-center justify-center text-indigo-600">
+                        {helper?.photoURL ? (
+                          <img src={helper.photoURL} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <User size={12} />
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-slate-700">{helper?.displayName || 'Unknown Helper'}</span>
+                        <span className="text-[8px] text-slate-400 leading-none">{helper?.email}</span>
+                      </div>
+                    </div>
+                  );
+                })() : (
+                  <span className="text-[10px] text-slate-400 italic">Waiting for helper...</span>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-slate-50">
+              <p className="text-[10px] text-slate-400 font-bold uppercase mb-2">Location</p>
+              <div className="flex items-start gap-1">
+                <MapPin size={12} className="text-slate-400 mt-0.5" />
+                <span className="text-[10px] text-slate-600 font-medium leading-tight">{req.location.address}</span>
+              </div>
+            </div>
+          </motion.div>
+        ))
+      ) : (
+        <div className="bg-white p-12 rounded-3xl border border-dashed border-slate-200 flex flex-col items-center text-center">
+          <Zap className="text-slate-200 mb-4" size={48} />
+          <p className="text-sm font-bold text-slate-400">No live requests at the moment</p>
+        </div>
+      )}
+    </div>
+  );
+
   const renderWorkTable = () => (
     <div className="space-y-4 mb-24">
       {completedRequests.length > 0 ? (
@@ -299,7 +422,7 @@ export const AdminDashboard: React.FC = () => {
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.2 }}
             >
-              {activeTab === 'work' ? renderWorkTable() : renderUserTable(filteredUsers)}
+              {activeTab === 'live' ? renderLiveWorkTable() : activeTab === 'work' ? renderWorkTable() : renderUserTable(filteredUsers)}
             </motion.div>
           </AnimatePresence>
         )}
@@ -339,6 +462,20 @@ export const AdminDashboard: React.FC = () => {
           >
             <BadgeCheck size={20} />
             <span className="text-[10px] font-bold uppercase tracking-tighter">Verified</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('live')}
+            className={`flex flex-col items-center gap-1 transition-colors relative ${
+              activeTab === 'live' ? 'text-indigo-600' : 'text-slate-400'
+            }`}
+          >
+            <Zap size={20} className={activeTab === 'live' ? 'animate-pulse' : ''} />
+            <span className="text-[10px] font-bold uppercase tracking-tighter">Live Work</span>
+            {liveRequests.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-indigo-500 text-white text-[8px] font-black w-4 h-4 flex items-center justify-center rounded-full border-2 border-white">
+                {liveRequests.length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('work')}
