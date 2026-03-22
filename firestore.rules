@@ -1,0 +1,129 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == 'gamingrafi.official@gmail.com' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin');
+    }
+
+    function isHelper() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'helper';
+    }
+
+    function isValidRequest(data) {
+      return data.get('userId', '') is string &&
+             (!('helperId' in data) || data.helperId is string) &&
+             data.get('category', '') is string && data.category.size() < 50 &&
+             data.get('description', '') is string && data.description.size() < 2000 &&
+             (!('workAddress' in data) || (data.workAddress is string && data.workAddress.size() < 500)) &&
+             data.get('status', 'pending') in ['pending', 'assigned', 'in-progress', 'completed', 'cancelled'] &&
+             data.get('location', null) is map &&
+             (!('estimatedCost' in data) || (data.estimatedCost is number && data.estimatedCost >= 0)) &&
+             isValidDateString(data.get('createdAt', '')) &&
+             (!('completedAt' in data) || isValidDateString(data.completedAt)) &&
+             (!('cancelledAt' in data) || isValidDateString(data.cancelledAt)) &&
+             (!('cancelledBy' in data) || data.cancelledBy in ['user', 'helper']) &&
+             (!('urgent' in data) || data.urgent is bool);
+    }
+
+    function isValidMessage(data) {
+      return data.get('requestId', null) is string &&
+             data.get('senderId', null) == request.auth.uid &&
+             data.get('text', '') is string && data.text.size() < 1000 &&
+             isValidDateString(data.get('createdAt', ''));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function isValidUser(data, userId) {
+      return data.get('uid', userId) == userId &&
+             (data.get('displayName', '') == '' || (data.displayName is string && data.displayName.size() < 100)) &&
+             (data.get('email', '') == '' || isValidEmail(data.email)) &&
+             (data.get('photoURL', '') == '' || isValidUrl(data.photoURL)) &&
+             data.get('role', 'user') in ['user', 'helper', 'admin'] &&
+             (data.get('phoneNumber', '') == '' || (data.phoneNumber is string && data.phoneNumber.size() < 20)) &&
+             (!('isOnline' in data) || data.isOnline is bool) &&
+             (!('category' in data) || (data.category is string && data.category.size() < 50)) &&
+             (!('rating' in data) || (data.rating is number && data.rating >= 0 && data.rating <= 5)) &&
+             (!('totalEarnings' in data) || (data.totalEarnings is number && data.totalEarnings >= 0)) &&
+             (!('verified' in data) || data.verified is bool) &&
+             (!('verificationStatus' in data) || data.verificationStatus in ['none', 'pending', 'approved', 'rejected']);
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data, userId) && 
+                      (request.resource.data.get('role', 'user') != 'admin' || isAdmin());
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data, userId) &&
+                      (isAdmin() || (
+                        (request.resource.data.get('role', 'user') == resource.data.get('role', 'user') || 
+                         (request.resource.data.get('role', 'user') in ['user', 'helper'] && resource.data.get('role', 'user') in ['user', 'helper'])) &&
+                        (request.resource.data.get('verified', false) == resource.data.get('verified', false)) &&
+                        (request.resource.data.get('verificationStatus', 'none') == resource.data.get('verificationStatus', 'none') || 
+                         (isOwner(userId) && request.resource.data.get('verificationStatus', 'none') == 'pending'))
+                      ));
+    }
+
+    match /requests/{requestId} {
+      allow read: if isAuthenticated() && (
+        resource.data.get('userId', '') == request.auth.uid || 
+        resource.data.get('helperId', '') == request.auth.uid ||
+        isAdmin() ||
+        (resource.data.get('status', '') == 'pending' && isHelper())
+      );
+      
+      allow create: if isAuthenticated() && 
+                      request.resource.data.get('userId', '') == request.auth.uid && 
+                      isValidRequest(request.resource.data);
+      
+      allow update: if isAuthenticated() && (
+        (resource.data.get('userId', '') == request.auth.uid && 
+         isValidRequest(request.resource.data) && 
+         request.resource.data.get('userId', '') == resource.data.get('userId', '') &&
+         request.resource.data.get('createdAt', '') == resource.data.get('createdAt', '')) ||
+        (isHelper() && 
+         isValidRequest(request.resource.data) &&
+         request.resource.data.get('userId', '') == resource.data.get('userId', '') &&
+         request.resource.data.get('createdAt', '') == resource.data.get('createdAt', '') &&
+         (!('helperId' in resource.data) || resource.data.get('helperId', '') == request.auth.uid)) ||
+        isAdmin()
+      );
+    }
+
+    match /requests/{requestId}/messages/{messageId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/requests/$(requestId)) && (
+          get(/databases/$(database)/documents/requests/$(requestId)).data.userId == request.auth.uid ||
+          get(/databases/$(database)/documents/requests/$(requestId)).data.get('helperId', null) == request.auth.uid
+        ))
+      );
+      
+      allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid && isValidMessage(request.resource.data);
+    }
+
+    match /test/connection {
+      allow read: if isAuthenticated();
+    }
+  }
+}

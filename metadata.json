@@ -1,0 +1,8 @@
+{
+  "name": "DakDao App",
+  "description": "A 30-minute on-demand service marketplace connecting users with nearby helpers like electricians, plumbers, and tutors in Bangladesh.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ]
+}
