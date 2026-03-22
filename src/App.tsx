@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 const AppContent: React.FC = () => {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, viewMode } = useAuth();
 
   if (loading) {
     return (
@@ -25,6 +25,10 @@ const AppContent: React.FC = () => {
 
   if (profile?.role === 'admin') {
     return <AdminDashboard />;
+  }
+
+  if (profile?.role === 'user-helper') {
+    return viewMode === 'helper' ? <HelperHome /> : <UserHome />;
   }
 
   if (profile?.role === 'helper') {

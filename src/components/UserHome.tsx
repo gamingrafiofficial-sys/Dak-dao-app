@@ -21,7 +21,7 @@ const CATEGORIES = [
 ];
 
 export const UserHome: React.FC = () => {
-  const { user, profile, logout, updateRole } = useAuth();
+  const { user, profile, logout, updateRole, setViewMode } = useAuth();
   const [location, setLocation] = useState<{ lat: number; lng: number; address: string; district?: string; thana?: string } | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [description, setDescription] = useState('');
@@ -445,9 +445,25 @@ export const UserHome: React.FC = () => {
           <h1 className="text-xl font-bold text-slate-900">DakDao</h1>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => updateRole('helper')} className="text-sm font-medium text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full">
-            Become a Helper
-          </button>
+          {profile?.role === 'user-helper' ? (
+            <button 
+              onClick={() => setViewMode('helper')} 
+              className="text-[10px] font-black uppercase tracking-tighter text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100 shadow-sm"
+            >
+              Switch to Helper
+            </button>
+          ) : profile?.role === 'user' && (
+            <button 
+              onClick={async () => {
+                if (user) {
+                  await updateDoc(doc(db, 'users', user.uid), { verificationStatus: 'pending' });
+                }
+              }} 
+              className="text-[10px] font-black uppercase tracking-tighter text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100 shadow-sm"
+            >
+              {profile.verificationStatus === 'pending' ? 'Pending Approval' : 'Become a Helper'}
+            </button>
+          )}
           <button onClick={logout} className="text-slate-500 hover:text-red-500 transition-colors">
             <LogOut size={20} />
           </button>

@@ -1,4 +1,4 @@
-export type UserRole = 'user' | 'helper' | 'admin';
+export type UserRole = 'user' | 'helper' | 'admin' | 'user-helper';
 
 export interface Location {
   latitude: number;

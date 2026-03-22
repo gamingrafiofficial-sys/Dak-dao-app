@@ -68,10 +68,31 @@ export const AdminDashboard: React.FC = () => {
   const handleVerification = async (userId: string, status: 'approved' | 'rejected' | 'none') => {
     setProcessingId(userId);
     try {
-      await updateDoc(doc(db, 'users', userId), {
+      const updates: any = {
         verificationStatus: status,
         verified: status === 'approved'
-      });
+      };
+      
+      // If approved, ensure they have at least helper role
+      if (status === 'approved') {
+        const user = allUsers.find(u => u.uid === userId);
+        if (user && user.role === 'user') {
+          updates.role = 'helper';
+        }
+      }
+
+      await updateDoc(doc(db, 'users', userId), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleRoleChange = async (userId: string, newRole: any) => {
+    setProcessingId(userId);
+    try {
+      await updateDoc(doc(db, 'users', userId), { role: newRole });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
     } finally {
@@ -132,11 +153,22 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${
-                    u.role === 'helper' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'
-                  }`}>
-                    {u.role}
-                  </span>
+                  <select
+                    disabled={processingId === u.uid}
+                    value={u.role}
+                    onChange={(e) => handleRoleChange(u.uid, e.target.value)}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter border-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer ${
+                      u.role === 'helper' ? 'bg-indigo-100 text-indigo-700' : 
+                      u.role === 'user-helper' ? 'bg-purple-100 text-purple-700' :
+                      u.role === 'admin' ? 'bg-red-100 text-red-700' :
+                      'bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    <option value="user">User</option>
+                    <option value="helper">Helper</option>
+                    <option value="user-helper">User + Helper</option>
+                    <option value="admin">Admin</option>
+                  </select>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2">

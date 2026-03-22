@@ -71,6 +71,8 @@ interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
+  viewMode: 'user' | 'helper';
+  setViewMode: (mode: 'user' | 'helper') => void;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   updateRole: (role: UserRole) => Promise<void>;
@@ -82,6 +84,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'user' | 'helper'>('user');
+
+  useEffect(() => {
+    if (profile?.role === 'helper') {
+      setViewMode('helper');
+    } else if (profile?.role === 'user-helper') {
+      // Keep current or default to helper for user-helper
+      setViewMode('helper');
+    } else {
+      setViewMode('user');
+    }
+  }, [profile?.role]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -164,7 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, login, logout, updateRole }}>
+    <AuthContext.Provider value={{ user, profile, loading, viewMode, setViewMode, login, logout, updateRole }}>
       {children}
     </AuthContext.Provider>
   );

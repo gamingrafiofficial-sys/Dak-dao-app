@@ -11,7 +11,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (request.auth.token.email == 'gamingrafi.official@gmail.com' ||
+        (request.auth.token.email == 'gamingrafi.official@gmail.com' && request.auth.token.email_verified == true ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin'));
     }
@@ -19,7 +19,7 @@ service cloud.firestore {
     function isHelper() {
       return isAuthenticated() && 
              (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'helper');
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') in ['helper', 'user-helper']);
     }
 
     function isValidRequest(data) {
@@ -59,11 +59,11 @@ service cloud.firestore {
 
     function isValidUser(data, userId) {
       return data.get('uid', userId) == userId &&
-             (data.get('displayName', '') == '' || (data.displayName is string && data.displayName.size() < 100)) &&
-             (data.get('email', '') == '' || isValidEmail(data.email)) &&
-             (data.get('photoURL', '') == '' || isValidUrl(data.photoURL)) &&
-             data.get('role', 'user') in ['user', 'helper', 'admin'] &&
-             (data.get('phoneNumber', '') == '' || (data.phoneNumber is string && data.phoneNumber.size() < 20)) &&
+             (data.get('displayName', null) == null || (data.displayName is string && data.displayName.size() < 100)) &&
+             (data.get('email', null) == null || isValidEmail(data.email)) &&
+             (data.get('photoURL', null) == null || isValidUrl(data.photoURL)) &&
+             data.get('role', 'user') in ['user', 'helper', 'admin', 'user-helper'] &&
+             (data.get('phoneNumber', null) == null || (data.phoneNumber is string && data.phoneNumber.size() < 20)) &&
              (!('isOnline' in data) || data.isOnline is bool) &&
              (!('category' in data) || (data.category is string && data.category.size() < 50)) &&
              (!('rating' in data) || (data.rating is number && data.rating >= 0 && data.rating <= 5)) &&

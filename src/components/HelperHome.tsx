@@ -9,7 +9,7 @@ import { Chat } from './Chat';
 import { reverseGeocode } from '../services/locationService';
 
 export const HelperHome: React.FC = () => {
-  const { user, profile, logout, updateRole } = useAuth();
+  const { user, profile, logout, updateRole, setViewMode } = useAuth();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'jobs' | 'chat' | 'profile'>('dashboard');
   const [selectedChatRequestId, setSelectedChatRequestId] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(false);
@@ -594,9 +594,14 @@ export const HelperHome: React.FC = () => {
           <h1 className="text-xl font-bold text-slate-900">DakDao Helper</h1>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => updateRole('user')} className="text-sm font-medium text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full">
-            Switch to User
-          </button>
+          {profile?.role === 'user-helper' && (
+            <button 
+              onClick={() => setViewMode('user')} 
+              className="text-[10px] font-black uppercase tracking-tighter text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100 shadow-sm"
+            >
+              Switch to User
+            </button>
+          )}
           <button onClick={logout} className="text-slate-500 hover:text-red-500 transition-colors">
             <LogOut size={20} />
           </button>
